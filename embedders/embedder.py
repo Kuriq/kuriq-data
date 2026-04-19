@@ -11,20 +11,18 @@ COLLECTION_NAME = "kuriq_courses"
 EMBED_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 BATCH_SIZE = 64
 
-
-def _get_chroma_client() -> chromadb.Client:
-    """환경변수에 따라 로컬 또는 서버 모드 클라이언트 반환"""
-    mode = os.getenv("CHROMA_MODE", "local")
-
+def get_chroma_client():
+    mode = os.getenv("CHROMA_MODE", "local")  # 기본값 로컬
+    
     if mode == "server":
-        host = os.getenv("CHROMA_HOST", "localhost")
-        port = int(os.getenv("CHROMA_PORT", "8000"))
-        logger.info(f"ChromaDB 서버 모드 — {host}:{port}")
-        return chromadb.HttpClient(host=host, port=port)
+        return chromadb.HttpClient(
+            host=os.getenv("CHROMA_HOST", "localhost"),
+            port=int(os.getenv("CHROMA_PORT", "8000")),
+        )
     else:
-        path = os.getenv("CHROMA_PATH", "./chroma_db")
-        logger.info(f"ChromaDB 로컬 모드 — {path}")
-        return chromadb.PersistentClient(path=path)
+        return chromadb.PersistentClient(
+            path=os.getenv("CHROMA_PATH", "./chroma_db")
+        )
 
 
 class Embedder:
