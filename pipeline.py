@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from models.course import Course
 from collectors.kmooc import KmoocCollector
+from collectors.kocw import KocwCollector
 from collectors.lifelong import LifelongCollector
 from preprocessors.cleaner import clean_course
 from preprocessors.category_mapper import normalize_category
@@ -70,6 +71,7 @@ def main():
 
     collectors = [
         (KmoocCollector(api_key=api_key).collect_all(), "K-MOOC"),
+        (KocwCollector(api_key=os.getenv("KOCW_API_KEY", "")).collect_all(), "KOCW"),
         (LifelongCollector(api_key=api_key).collect_all(), "전국평생학습"),
     ]
 
