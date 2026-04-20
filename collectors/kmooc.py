@@ -5,7 +5,7 @@ from models.course import Course
 
 logger = logging.getLogger(__name__)
 
-KMOOC_API_URL = "http://api.data.go.kr/openapi/tn_pubr_public_knline_lrn_api"
+KMOOC_API_URL = "https://apis.data.go.kr/B552881/kmooc_v2_0/courseList_v2_0"
 
 
 class KmoocCollector(BaseCollector):
@@ -21,33 +21,34 @@ class KmoocCollector(BaseCollector):
             logger.info(f"[K-MOOC] page {page} 수집 중... (누적: {collected}개)")
 
             data = self.fetch(KMOOC_API_URL, params={
-                "serviceKey": self.api_key,
-                "pageNo": page,
-                "numOfRows": self.PAGE_SIZE,
-                "type": "json",
-            })
+                "ServiceKey": self.api_key,
+                "Page": page,
+                "Size": self.PAGE_SIZE,
+            }, debug=(page == 1))
 
             if not data:
                 break
 
-            body = data.get("response", {}).get("body", {})
+            if data.get("resultCode", "00") != "00":
+                logger.error(f"[K-MOOC] API 오류 — {data.get('resultCode')}: {data.get('resultMsg')}")
+                break
 
             if total_count is None:
-                total_count = int(body.get("totalCount", 0))
+                total_count = int(data.get("header", {}).get("totalCount", 0))
                 logger.info(f"[K-MOOC] 전체 강좌 수: {total_count}개")
 
-            items = body.get("items", {})
+            items = data.get("items", [])
+            if isinstance(items, dict):
+                items = [items]
             if not items:
                 break
 
-            item_list = items.get("item", [])
-            if isinstance(item_list, dict):
-                item_list = [item_list]
+            if page == 1:
+                sample = items[0] if items else {}
+                logger.debug(f"[K-MOOC] 첫 번째 아이템 키: {list(sample.keys())}")
+                logger.debug(f"[K-MOOC] summary 샘플: {repr(sample.get('summary', ''))}")
 
-            if not item_list:
-                break
-
-            for item in item_list:
+            for item in items:
                 course = self._parse(item)
                 if course:
                     collected += 1
@@ -63,15 +64,31 @@ class KmoocCollector(BaseCollector):
 
     def _parse(self, item: dict) -> Course | None:
         try:
+            org = item.get("org_name", "").strip()
+            professor = item.get("professor", "").strip()
+            study_start = item.get("study_start", "")
+            study_end = item.get("study_end", "")
+
+            parts = []
+            if org:
+                parts.append(f"{org} 제공")
+            if professor:
+                parts.append(f"담당 교수: {professor}")
+            if study_start and study_end:
+                parts.append(f"학습 기간: {study_start} ~ {study_end}")
+            description = " | ".join(parts)
+
+            duration = f"{study_start} ~ {study_end}" if study_start and study_end else ""
+
             return Course(
-                id=item.get("lctrId", ""),
-                title=item.get("lctrNm", "").strip(),
-                institution=item.get("orgnztNm", "").strip(),
+                id=item.get("id", ""),
+                title=item.get("name", "").strip(),
+                institution=org,
                 platform=self.PLATFORM,
-                category=item.get("lctrFldNm", "기타"),
-                description=item.get("lctrSumryCn", "").strip(),
-                duration=item.get("lctrPd", ""),
-                url=item.get("lctrUrl", ""),
+                category=item.get("name", ""),
+                description=description,
+                duration=duration,
+                url=item.get("url", ""),
                 is_free=True,
             )
         except Exception as e:

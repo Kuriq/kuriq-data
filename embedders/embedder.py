@@ -29,7 +29,7 @@ class Embedder:
     def __init__(self):
         logger.info(f"임베딩 모델 로딩: {EMBED_MODEL}")
         self.model = SentenceTransformer(EMBED_MODEL)
-        self.client = _get_chroma_client()
+        self.client = get_chroma_client()
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},

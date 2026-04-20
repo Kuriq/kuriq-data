@@ -44,6 +44,7 @@ class KocwCollector(BaseCollector):
                 "verb": "list_item",
                 "category_type": "t",
                 "category_id": cat_id,
+                "from": "20000101",
                 "start_num": start,
                 "end_num": end,
             }
@@ -120,7 +121,7 @@ class KocwCollector(BaseCollector):
                 title=title,
                 institution=self._text(item, "provider"),
                 platform=self.PLATFORM,
-                category=cat_name,
+                category=self._text(item, "taxon") or cat_name,
                 description=self._text(item, "course_description"),
                 duration=duration,
                 url=self._text(item, "course_url"),
