@@ -1,7 +1,7 @@
-import chromadb
+from embedders.embedder import get_chroma_client
 
 try:
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = get_chroma_client()
     
     collections = client.list_collections()
     print(f"현재 DB에 있는 컬렉션 목록: {[c.name for c in collections]}")

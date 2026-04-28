@@ -109,6 +109,7 @@ streamlit run ui_viewer.py
 | `level` | str | 난이도 |
 
 ChromaDB에는 `{platform}_{id}` 형식의 ID로 upsert되며, 임베딩 텍스트는 `강의명 [표준카테고리] 기관 소개(200자)` 형식으로 생성됩니다.
+server 모드에서는 `CHROMA_HOST`/`CHROMA_PORT`로 연결되는 공유 Chroma 컨테이너를 사용합니다.
 
 ## 의존성
 

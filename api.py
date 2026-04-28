@@ -13,6 +13,11 @@ _jobs: dict[str, dict] = {}
 _lock = RLock()
 
 
+@app.get("/health")
+def health():
+    return {"status": "UP"}
+
+
 class TriggerRequest(BaseModel):
     platform: PipelinePlatform = "ALL"
     incremental: bool = True

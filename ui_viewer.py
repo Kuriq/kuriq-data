@@ -1,6 +1,6 @@
 import streamlit as st
-import chromadb
 import pandas as pd
+from embedders.embedder import get_chroma_client
 
 st.set_page_config(layout="wide")
 st.title("큐릭 크로마DB 뷰어")
