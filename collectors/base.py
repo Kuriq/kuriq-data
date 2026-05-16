@@ -53,6 +53,31 @@ class BaseCollector(ABC):
             time.sleep(1)
         return {}
 
+    def fetch_post(self, url: str, data: dict = None, headers: dict = None, retries: int = 3, debug: bool = False) -> str:
+        """공통 HTTP POST 요청 — HTML 응답 반환 (재시도 로직 포함)"""
+        for attempt in range(retries):
+            try:
+                response = self.session.post(url, data=data, headers=headers, timeout=15)
+                response.raise_for_status()
+                response.encoding = "utf-8"
+
+                if debug:
+                    logger.debug(f"[{self.PLATFORM}] HTTP {response.status_code} — URL: {url}")
+                    logger.debug(f"[{self.PLATFORM}] RAW HTML:\n{response.text[:2000]}")
+
+                return response.text
+            except requests.exceptions.Timeout:
+                logger.warning(f"[{self.PLATFORM}] 타임아웃 (시도 {attempt + 1}/{retries}): {url}")
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"[{self.PLATFORM}] HTTP 오류 {e.response.status_code}: {url}")
+                logger.error(f"[{self.PLATFORM}] 응답 본문: {e.response.text[:500]}")
+                break
+            except Exception as e:
+                logger.error(f"[{self.PLATFORM}] POST 요청 실패: {e}")
+                break
+            time.sleep(1)
+        return ""
+
     def delay(self):
         """API 호출 간격 준수"""
         time.sleep(self.REQUEST_DELAY)

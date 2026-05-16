@@ -1,45 +1,58 @@
-# crawl_allgokr.py
-# 온국민평생배움터 강좌 크롤링 (description 없이 목록만)
-# 실행: python crawl_allgokr.py
-
-import requests
-import json
-import time
 import logging
+from typing import Generator
 from bs4 import BeautifulSoup
+from collectors.base import BaseCollector
+from models.course import Course
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] — %(message)s",
-)
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.all.go.kr"
-LIST_API_URL = f"{BASE_URL}/apol/getListSerClassMoreAjax.do"
-
-PAGE_SIZE = 100
-DELAY = 0.3
-OUTPUT_FILE = "allgokr_courses.json"
+ALLGO_BASE_URL = "https://www.all.go.kr"
+ALLGO_LIST_API_URL = f"{ALLGO_BASE_URL}/apol/getListSerClassMoreAjax.do"
 
 
-def init_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": BASE_URL,
-    })
-    try:
-        session.get(BASE_URL, timeout=10)
-        logger.info("세션 초기화 완료")
-    except Exception as e:
-        logger.warning(f"세션 초기화 실패: {e}")
-    return session
+class AllgoCollector(BaseCollector):
+    PLATFORM = "온국민평생배움터"
+    PAGE_SIZE = 100
 
+    def collect_all(self) -> Generator[Course, None, None]:
+        page = 1
+        collected = 0
+        empty_count = 0
 
-def fetch_list(session: requests.Session, page: int) -> str | None:
-    try:
-        response = session.post(
-            LIST_API_URL,
+        logger.info(f"[{self.PLATFORM}] 크롤링 시작")
+
+        while True:
+            logger.info(f"[{self.PLATFORM}] page {page} 수집 중... (누적: {collected}개)")
+
+            html = self._fetch_list(page, debug=(page == 1))
+            if not html:
+                break
+
+            cards = self._parse_cards(html)
+            if not cards:
+                empty_count += 1
+                if empty_count >= 3:
+                    logger.info(f"[{self.PLATFORM}] 빈 페이지 3회 연속 — 수집 종료")
+                    break
+                page += 1
+                continue
+
+            empty_count = 0
+            for card in cards:
+                course = self._parse(card)
+                if course:
+                    collected += 1
+                    yield course
+
+            page += 1
+            self.delay()
+
+        logger.info(f"[{self.PLATFORM}] 수집 완료 — 총 {collected}개")
+
+    def _fetch_list(self, page: int, debug: bool = False) -> str:
+        """온국민평생배움터 목록 API (POST)"""
+        return self.fetch_post(
+            ALLGO_LIST_API_URL,
             data={
                 "searchClassTypeCd": "01",
                 "searchKeyword": "",
@@ -49,103 +62,64 @@ def fetch_list(session: requests.Session, page: int) -> str | None:
                 "searchClassSeCdArr[]": ["01", "02"],
                 "searchCndtnSe": "A",
                 "pageIndex": page,
-                "pageUnit": PAGE_SIZE,
+                "pageUnit": self.PAGE_SIZE,
             },
-            headers={"Referer": f"{BASE_URL}/apol/viewListSerClass.do"},
-            timeout=15,
+            headers={"Referer": f"{ALLGO_BASE_URL}/apol/viewListSerClass.do"},
+            debug=debug,
         )
-        response.raise_for_status()
-        response.encoding = "utf-8"
-        return response.text
-    except Exception as e:
-        logger.error(f"목록 요청 실패 (page {page}): {e}")
-        return None
 
+    def _parse_cards(self, html: str) -> list[dict]:
+        """HTML에서 강좌 카드 목록 추출"""
+        soup = BeautifulSoup(html, "html.parser")
+        cards = soup.select("li.card")
+        result = []
 
-def parse_cards(html: str) -> list[dict]:
-    soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("li.card")
-    result = []
+        for card in cards:
+            try:
+                a_tag = card.select_one("a")
+                if not a_tag:
+                    continue
 
-    for card in cards:
+                href = a_tag.get("href", "")
+                class_sn = href.split("classSn=")[-1] if "classSn=" in href else ""
+                if not class_sn:
+                    continue
+
+                title_el = card.select_one("strong.card__title")
+                title = title_el.text.strip() if title_el else ""
+
+                category_el = card.select_one("p.card__sort__title")
+                category = category_el.text.strip() if category_el else "기타"
+
+                institution_el = card.select_one("li.card__agency")
+                institution = institution_el.text.strip() if institution_el else ""
+
+                result.append({
+                    "id": class_sn,
+                    "title": title,
+                    "category": category,
+                    "institution": institution,
+                    "url": f"{ALLGO_BASE_URL}/cntnts/viewContentsDetailInfo.do?classSn={class_sn}",
+                })
+            except Exception as e:
+                logger.warning(f"[{self.PLATFORM}] 카드 파싱 실패: {e}")
+
+        return result
+
+    def _parse(self, card: dict) -> Course | None:
+        """카드 딕셔너리를 Course 모델로 변환"""
         try:
-            a_tag = card.select_one("a")
-            if not a_tag:
-                continue
-
-            href = a_tag.get("href", "")
-            class_sn = href.split("classSn=")[-1] if "classSn=" in href else ""
-            if not class_sn:
-                continue
-
-            title_el = card.select_one("strong.card__title")
-            title = title_el.text.strip() if title_el else ""
-
-            category_el = card.select_one("p.card__sort__title")
-            category = category_el.text.strip() if category_el else "기타"
-
-            institution_el = card.select_one("li.card__agency")
-            institution = institution_el.text.strip() if institution_el else ""
-
-            result.append({
-                "id": class_sn,
-                "title": title,
-                "category": category,
-                "institution": institution,
-                "description": "",
-                "url": f"{BASE_URL}/cntnts/viewContentsDetailInfo.do?classSn={class_sn}",
-                "platform": "온국민평생배움터",
-                "is_free": True,
-            })
+            return Course(
+                id=card["id"],
+                title=card["title"],
+                institution=card["institution"],
+                platform=self.PLATFORM,
+                category=card["category"],
+                description="",
+                duration="",
+                url=card["url"],
+                is_free=True,
+            )
         except Exception as e:
-            logger.warning(f"카드 파싱 실패: {e}")
-
-    return result
-
-
-def main():
-    session = init_session()
-    all_courses = []
-    page = 1
-    empty_count = 0
-
-    logger.info("=== 온국민평생배움터 크롤링 시작 ===")
-
-    while True:
-        logger.info(f"page {page} 수집 중 (누적: {len(all_courses)}개)")
-
-        html = fetch_list(session, page)
-        if not html:
-            break
-
-        cards = parse_cards(html)
-
-        if not cards:
-            empty_count += 1
-            if empty_count >= 3:
-                logger.info("빈 페이지 3회 연속 — 수집 종료")
-                break
-            page += 1
-            continue
-
-        empty_count = 0
-        all_courses.extend(cards)
-
-        # 100개마다 중간 저장
-        if len(all_courses) % 1000 == 0:
-            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-                json.dump(all_courses, f, ensure_ascii=False, indent=2)
-            logger.info(f"중간 저장 완료 — {len(all_courses)}개")
-
-        page += 1
-        time.sleep(DELAY)
-
-    # 최종 저장
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(all_courses, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"=== 크롤링 완료 — 총 {len(all_courses)}개 → {OUTPUT_FILE} 저장 ===")
-
-
-if __name__ == "__main__":
-    main()
+            logger.warning(f"[{self.PLATFORM}] Course 파싱 실패: {e}")
+            return None

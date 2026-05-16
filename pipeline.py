@@ -7,6 +7,7 @@ from models.course import Course
 from collectors.kmooc import KmoocCollector
 from collectors.kocw import KocwCollector
 from collectors.lifelong import LifelongCollector
+from collectors.allgo import AllgoCollector
 from preprocessors.cleaner import clean_course
 from preprocessors.category_mapper import normalize_category
 from preprocessors.validator import is_valid
@@ -20,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BATCH_FLUSH_SIZE = 500
-PipelinePlatform = Literal["K-MOOC", "KOCW", "LLL_PORTAL", "SEOUL_LLL", "ALL"]
+PipelinePlatform = Literal["K-MOOC", "KOCW", "LLL_PORTAL", "SEOUL_LLL", "ALLGO", "ALL"]
 ProgressCallback = Callable[[dict], None]
 
 
@@ -73,10 +74,13 @@ def build_collectors(platform: PipelinePlatform, api_key: str):
         return [(KocwCollector(api_key=os.getenv("KOCW_API_KEY", "")).collect_all(), "KOCW")]
     if platform in ("LLL_PORTAL", "SEOUL_LLL"):
         return [(LifelongCollector(api_key=api_key).collect_all(), platform)]
+    if platform == "ALLGO":
+        return [(AllgoCollector().collect_all(), "온국민평생배움터")]
     return [
         (KmoocCollector(api_key=api_key).collect_all(), "K-MOOC"),
         (KocwCollector(api_key=os.getenv("KOCW_API_KEY", "")).collect_all(), "KOCW"),
         (LifelongCollector(api_key=api_key).collect_all(), "전국평생학습"),
+        (AllgoCollector().collect_all(), "온국민평생배움터"),
     ]
 
 
