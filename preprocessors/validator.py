@@ -12,6 +12,7 @@ def is_valid(course: Course) -> bool:
         return False
     if not course.id:
         return False
-    if len(course.description) < MIN_DESCRIPTION_LENGTH:
-        return False
+    if course.platform != "온국민평생배움터":
+        if len(course.description) < MIN_DESCRIPTION_LENGTH:
+            return False
     return True
