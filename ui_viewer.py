@@ -6,7 +6,7 @@ st.set_page_config(layout="wide")
 st.title("큐릭 크로마DB 뷰어")
 
 try:
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = get_chroma_client()
     collection = client.get_collection(name="kuriq_courses")
     
     total_count = collection.count()
