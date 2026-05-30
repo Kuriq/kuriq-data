@@ -39,15 +39,20 @@ def run_collector(
     embedder: Embedder,
     name: str,
     progress_callback: ProgressCallback | None = None,
-) -> int:
+) -> tuple[int, dict]:
     buffer = []
     total = 0
+    category_count = {}
 
     for raw in collector_gen:
         processed = preprocess(raw)
         if processed is None:
             continue
         buffer.append(processed)
+        
+        # 카테고리 카운트
+        cat = processed.std_category or "기타"
+        category_count[cat] = category_count.get(cat, 0) + 1
 
         if len(buffer) >= BATCH_FLUSH_SIZE:
             embedder.upsert(buffer)
@@ -64,7 +69,7 @@ def run_collector(
             progress_callback({"crawled": total, "newCourses": total})
 
     logger.info(f"[{name}] 완료 — 총 {total}개 적재")
-    return total
+    return total, category_count
 
 
 def build_collectors(platform: PipelinePlatform, api_key: str):
@@ -88,22 +93,50 @@ def run_pipeline(
     platform: PipelinePlatform = "ALL",
     incremental: bool = True,
     progress_callback: ProgressCallback | None = None,
+    reset: bool = False,
 ) -> int:
     api_key = os.getenv("DATA_GO_KR_API_KEY")
     if not api_key:
-        raise ValueError(".env에 DATA_GO_KR_API_KEY가 없습니다.")
+        raise ValueError(".env 에 DATA_GO_KR_API_KEY 가 없습니다.")
 
-    embedder = Embedder()
+    embedder = Embedder(reset=reset)
 
     logger.info("=== 큐릭 데이터 파이프라인 시작 ===")
-    logger.info(f"platform={platform}, incremental={incremental}")
+    logger.info(f"platform={platform}, incremental={incremental}, reset={reset}")
     logger.info(f"파이프라인 시작 전 ChromaDB: {embedder.count()}개")
 
     collectors = build_collectors(platform, api_key)
 
+    # 통계 수집
+    platform_stats = {}
+    total_category_count = {}
     grand_total = 0
+    
     for gen, name in collectors:
-        grand_total += run_collector(gen, embedder, name, progress_callback=progress_callback)
+        count, category_count = run_collector(gen, embedder, name, progress_callback=progress_callback)
+        platform_stats[name] = count
+        grand_total += count
+        
+        # 카테고리 통합 카운트
+        for cat, cnt in category_count.items():
+            total_category_count[cat] = total_category_count.get(cat, 0) + cnt
+
+    # 통계 출력
+    logger.info("\n" + "="*60)
+    logger.info("📊 파이프라인 실행 통계")
+    logger.info("="*60)
+    
+    logger.info("\n[플랫폼별 적재 개수]")
+    for plat, cnt in sorted(platform_stats.items(), key=lambda x: x[1], reverse=True):
+        logger.info(f"  {plat}: {cnt:,}개")
+    logger.info(f"  └ 총계: {grand_total:,}개")
+    
+    logger.info("\n[카테고리별 강좌 적재 개수]")
+    for cat, cnt in sorted(total_category_count.items(), key=lambda x: x[1], reverse=True):
+        logger.info(f"  {cat}: {cnt:,}개")
+    logger.info(f"  └ 총계: {sum(total_category_count.values()):,}개")
+    
+    logger.info("="*60)
 
     logger.info(f"=== 파이프라인 완료 — 총 {grand_total}개 적재 ===")
     logger.info(f"파이프라인 완료 후 ChromaDB: {embedder.count()}개")

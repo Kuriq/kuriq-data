@@ -26,10 +26,19 @@ def get_chroma_client():
 
 
 class Embedder:
-    def __init__(self):
+    def __init__(self, reset: bool = False):
         logger.info(f"임베딩 모델 로딩: {EMBED_MODEL}")
         self.model = SentenceTransformer(EMBED_MODEL)
         self.client = get_chroma_client()
+        
+        # 기존 collection 삭제 후 재생성 (임베딩 차원 불일치 방지)
+        if reset:
+            try:
+                self.client.delete_collection(name=COLLECTION_NAME)
+                logger.info(f"기존 collection 삭제 완료 — {COLLECTION_NAME}")
+            except Exception:
+                pass
+        
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
