@@ -46,13 +46,23 @@ class Embedder:
         logger.info(f"ChromaDB 연결 완료 — {COLLECTION_NAME} (현재 {self.count()}개)")
 
     def upsert(self, courses: List[Course]) -> None:
-        """배치 단위로 임베딩 생성 후 ChromaDB upsert"""
+        """배치 단위로 임베딩 생성 후 ChromaDB upsert — 중복 ID 제거"""
         if not courses:
             return
 
-        ids = [c.chroma_id() for c in courses]
-        documents = [c.embed_text() for c in courses]
-        metadatas = [c.to_metadata() for c in courses]
+        # 중복 ID 제거 (나중에出现的인 것이 우선)
+        seen_ids = set()
+        unique_courses = []
+        for course in reversed(courses):
+            cid = course.chroma_id()
+            if cid not in seen_ids:
+                seen_ids.add(cid)
+                unique_courses.append(course)
+        unique_courses.reverse()
+
+        ids = [c.chroma_id() for c in unique_courses]
+        documents = [c.embed_text() for c in unique_courses]
+        metadatas = [c.to_metadata() for c in unique_courses]
 
         for i in range(0, len(ids), BATCH_SIZE):
             b_ids = ids[i:i + BATCH_SIZE]

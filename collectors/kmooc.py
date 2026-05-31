@@ -46,7 +46,6 @@ class KmoocCollector(BaseCollector):
             if page == 1:
                 sample = items[0] if items else {}
                 logger.debug(f"[K-MOOC] 첫 번째 아이템 키: {list(sample.keys())}")
-                logger.debug(f"[K-MOOC] summary 샘플: {repr(sample.get('summary', ''))}")
 
             for item in items:
                 course = self._parse(item)
@@ -68,6 +67,7 @@ class KmoocCollector(BaseCollector):
             professor = item.get("professor", "").strip()
             study_start = item.get("study_start", "")
             study_end = item.get("study_end", "")
+            name = item.get("name", "").strip()
 
             parts = []
             if org:
@@ -80,12 +80,14 @@ class KmoocCollector(BaseCollector):
 
             duration = f"{study_start} ~ {study_end}" if study_start and study_end else ""
 
+            # K-MOOC API 는 카테고리 필드를 제공하지 않음 → 강의명으로 카테고리 추론
+            # category_mapper 에서 처리하므로 빈 문자열로 설정
             return Course(
                 id=item.get("id", ""),
-                title=item.get("name", "").strip(),
+                title=name,
                 institution=org,
                 platform=self.PLATFORM,
-                category=item.get("name", ""),
+                category=name,  # 강의명을 카테고리로 설정 (전처리에서 키워드 추출용)
                 description=description,
                 duration=duration,
                 url=item.get("url", ""),
