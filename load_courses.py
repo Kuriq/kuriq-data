@@ -23,7 +23,7 @@ CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
 EMBEDDING_MODEL = "text-embedding-3-small"
 BATCH_SIZE = 50
 
-# 카테고리 매핑 (원본 → 표준)
+# 카테고리 매핑
 CATEGORY_MAP = {
     "인문/교양": "인문",
     "환경/생태": "자연과학",
