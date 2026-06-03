@@ -1,5 +1,6 @@
 requests==2.31.0
 chromadb>=0.5.0
 sentence-transformers==2.6.1
-python-dotenv==1.0.0fastapi>=0.110.0
+python-dotenv==1.0.0
+fastapi>=0.110.0
 uvicorn[standard]>=0.29.0

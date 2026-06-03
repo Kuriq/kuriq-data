@@ -84,6 +84,20 @@ python pipeline.py
 python check_db.py
 ```
 
+### 전국도서관표준데이터 미리보기 수집
+
+```bash
+python preview_public_libraries.py --pages 1 --num-rows 100
+```
+
+- 결과는 기본적으로 `preview_outputs/public_libraries_preview.json` 에 저장됩니다.
+- DB/Chroma 저장 없이 원본 API 응답 기반으로 데이터 품질을 점검할 때 사용합니다.
+- 예시 필터:
+
+```bash
+python preview_public_libraries.py --ctprvn 경기도 --sigungu 남양주시 --pages 1 --num-rows 50
+```
+
 ### DB 뷰어 (Streamlit)
 
 ```bash
