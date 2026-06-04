@@ -98,6 +98,27 @@ python preview_public_libraries.py --pages 1 --num-rows 100
 python preview_public_libraries.py --ctprvn 경기도 --sigungu 남양주시 --pages 1 --num-rows 50
 ```
 
+### 전국도서관표준데이터를 MySQL `study_spaces`에 적재
+
+`.env`에 MySQL 연결 정보를 추가합니다.
+
+```env
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=kuriq
+```
+
+실행 예시:
+
+```bash
+.venv/bin/python load_public_libraries_to_mysql.py --pages 5 --num-rows 100
+```
+
+- 장소추천 MVP에 필요한 필드만 사용합니다: 이름, 타입, 주소, 좌표, 운영시간, 전화번호
+- `name + address + type` 기준으로 기존 레코드가 있으면 update, 없으면 insert 합니다.
+
 ### DB 뷰어 (Streamlit)
 
 ```bash
