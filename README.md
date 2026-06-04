@@ -113,11 +113,56 @@ MYSQL_DATABASE=kuriq
 실행 예시:
 
 ```bash
-.venv/bin/python load_public_libraries_to_mysql.py --pages 5 --num-rows 100
+.venv/bin/python load_public_libraries_to_mysql.py
 ```
 
 - 장소추천 MVP에 필요한 필드만 사용합니다: 이름, 타입, 주소, 좌표, 운영시간, 전화번호
 - `name + address + type` 기준으로 기존 레코드가 있으면 update, 없으면 insert 합니다.
+- 기본값은 `num_rows=300`, `pages=0(전체 적재)` 이므로 전국 데이터를 안정적으로 끝까지 가져옵니다.
+- 공공데이터 API 응답이 느릴 수 있어 수집기 기본 read timeout도 늘려두었습니다.
+- 테스트/샘플 적재가 필요하면 명시적으로 페이지 수를 제한하세요.
+
+대량 적재를 더 빠르게 돌리고 싶으면:
+
+```bash
+COLLECTOR_READ_TIMEOUT=90 .venv/bin/python load_public_libraries_to_mysql.py --num-rows 1000
+```
+
+### 청년센터 공간 정보를 MySQL `study_spaces`에 적재
+
+`.env`에 청년센터 API 키와 카카오 로컬 API 키를 추가합니다.
+
+```env
+YOUTHCENTER_API_KEY=your-youthcenter-api-key
+KAKAO_LOCAL_REST_API_KEY=your-kakao-local-rest-api-key
+```
+
+기본 실행 예시:
+
+```bash
+.venv/bin/python load_youth_centers_to_mysql.py
+```
+
+- 청년센터 API는 좌표를 주지 않으므로 주소를 카카오 로컬 API로 좌표 변환 후 `study_spaces`에 적재합니다.
+- 적재 타입은 `YOUTH_CENTER` 입니다.
+
+서울만 적재 예시:
+
+```bash
+.venv/bin/python load_youth_centers_to_mysql.py --ctpv-cd 11
+```
+
+샘플 적재 예시:
+
+```bash
+.venv/bin/python load_public_libraries_to_mysql.py --pages 1 --num-rows 100
+```
+
+서울만 적재 예시:
+
+```bash
+.venv/bin/python load_public_libraries_to_mysql.py --ctprvn 서울특별시
+```
 
 ### DB 뷰어 (Streamlit)
 

@@ -69,3 +69,27 @@ def normalize_public_library_to_study_space(item: dict) -> StudySpaceRecord | No
         is_active=True,
         last_updated_at=_parse_date(_pick(item, "referenceDate", "REFERENCE_DATE")),
     )
+
+
+def normalize_youth_center_to_study_space(item: dict, latitude: float, longitude: float) -> StudySpaceRecord | None:
+    name = _pick(item, "cntrNm", "CNTR_NM")
+    address = _pick(item, "cntrAddr", "CNTR_ADDR")
+    detail_address = _pick(item, "cntrDaddr", "CNTR_DADDR")
+    full_address = " ".join(part.strip() for part in [address, detail_address] if part and part.strip())
+
+    if not name or not full_address:
+        return None
+
+    return StudySpaceRecord(
+        name=name,
+        type="YOUTH_CENTER",
+        address=full_address,
+        latitude=StudySpaceRecord.quantize_coordinate(latitude),
+        longitude=StudySpaceRecord.quantize_coordinate(longitude),
+        operating_hours=None,
+        phone=_pick(item, "cntrTelno", "CNTR_TELNO"),
+        has_wifi=False,
+        has_power_outlet=False,
+        is_active=True,
+        last_updated_at=None,
+    )
