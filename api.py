@@ -21,6 +21,9 @@ def health():
 class TriggerRequest(BaseModel):
     platform: PipelinePlatform = "ALL"
     incremental: bool = True
+    syncMysql: bool | None = None
+    resetChroma: bool = False
+    deactivateMissing: bool = False
 
 
 class JobProgress(BaseModel):
@@ -49,12 +52,26 @@ def _update_progress(job_id: str, updates: dict):
         job["progress"].update(updates)
 
 
-def _run_job(job_id: str, platform: PipelinePlatform, incremental: bool):
+def _run_job(
+    job_id: str,
+    platform: PipelinePlatform,
+    incremental: bool,
+    sync_mysql: bool | None,
+    reset_chroma: bool,
+    deactivate_missing: bool,
+):
     try:
         def progress_callback(payload: dict):
             _update_progress(job_id, payload)
 
-        run_pipeline(platform=platform, incremental=incremental, progress_callback=progress_callback)
+        run_pipeline(
+            platform=platform,
+            incremental=incremental,
+            progress_callback=progress_callback,
+            reset=reset_chroma,
+            sync_mysql=sync_mysql,
+            deactivate_missing=deactivate_missing,
+        )
         with _lock:
             job = _jobs[job_id]
             job["status"] = "COMPLETED"
@@ -81,7 +98,15 @@ def trigger_crawler(request: TriggerRequest, background_tasks: BackgroundTasks):
             "startedAt": started_at,
             "estimatedCompletionAt": started_at + timedelta(minutes=30),
         }
-    background_tasks.add_task(_run_job, job_id, request.platform, request.incremental)
+    background_tasks.add_task(
+        _run_job,
+        job_id,
+        request.platform,
+        request.incremental,
+        request.syncMysql,
+        request.resetChroma,
+        request.deactivateMissing,
+    )
     return {"jobId": job_id, "platform": request.platform, "status": "STARTED", "startedAt": started_at}
 
 

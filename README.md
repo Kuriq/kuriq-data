@@ -78,6 +78,35 @@ python pipeline.py
 
 세 플랫폼의 강좌를 순서대로 수집하여 ChromaDB에 적재합니다. 500개 단위로 배치 flush됩니다.
 
+MySQL `courses`를 정본으로 삼고 ChromaDB를 재생성하려면 아래처럼 실행합니다.
+
+```bash
+python pipeline.py --full
+```
+
+`--full`은 다음 옵션을 한 번에 켭니다.
+
+- `--sync-mysql`: `platform + platform_course_id` 기준으로 MySQL `courses`를 upsert하고 기존 UUID를 유지합니다.
+- `--reset-chroma`: ChromaDB `kuriq_courses` 컬렉션을 삭제 후 재생성합니다.
+- `--deactivate-missing`: 이번 수집 결과에 없는 기존 MySQL 강좌를 `is_active=false`로 비활성화합니다.
+
+개별 옵션으로 나눠 실행할 수도 있습니다.
+
+```bash
+python pipeline.py --sync-mysql --reset-chroma
+python pipeline.py --platform K-MOOC --sync-mysql
+```
+
+MySQL 적재를 사용할 때는 `.env`에 연결 정보를 추가합니다.
+
+```env
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=kuriq
+```
+
 ### DB 상태 확인
 
 ```bash

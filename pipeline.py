@@ -1,3 +1,4 @@
+import argparse
 import os
 import logging
 from typing import Callable, Generator, Literal
@@ -12,6 +13,7 @@ from preprocessors.cleaner import clean_course
 from preprocessors.category_mapper import normalize_category
 from preprocessors.validator import is_valid
 from embedders.embedder import Embedder
+from course_store import CourseStore
 
 load_dotenv()
 logging.basicConfig(
@@ -38,6 +40,8 @@ def run_collector(
     collector_gen: Generator[Course, None, None],
     embedder: Embedder,
     name: str,
+    course_store: CourseStore | None = None,
+    seen_keys: set[tuple[str, str]] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[int, dict]:
     buffer = []
@@ -55,7 +59,10 @@ def run_collector(
         category_count[cat] = category_count.get(cat, 0) + 1
 
         if len(buffer) >= BATCH_FLUSH_SIZE:
-            embedder.upsert(buffer)
+            courses_to_embed = course_store.upsert_many(buffer) if course_store else buffer
+            if seen_keys is not None:
+                seen_keys.update((course.backend_platform(), course.id) for course in courses_to_embed)
+            embedder.upsert(courses_to_embed)
             total += len(buffer)
             if progress_callback:
                 progress_callback({"crawled": total, "newCourses": total})
@@ -63,7 +70,10 @@ def run_collector(
             buffer.clear()
 
     if buffer:
-        embedder.upsert(buffer)
+        courses_to_embed = course_store.upsert_many(buffer) if course_store else buffer
+        if seen_keys is not None:
+            seen_keys.update((course.backend_platform(), course.id) for course in courses_to_embed)
+        embedder.upsert(courses_to_embed)
         total += len(buffer)
         if progress_callback:
             progress_callback({"crawled": total, "newCourses": total})
@@ -94,15 +104,29 @@ def run_pipeline(
     incremental: bool = True,
     progress_callback: ProgressCallback | None = None,
     reset: bool = False,
+    sync_mysql: bool | None = None,
+    deactivate_missing: bool = False,
 ) -> int:
     api_key = os.getenv("DATA_GO_KR_API_KEY")
     if not api_key:
         raise ValueError(".env 에 DATA_GO_KR_API_KEY 가 없습니다.")
 
+    if sync_mysql is None:
+        sync_mysql = os.getenv("MYSQL_SYNC_ENABLED", "false").lower() in ("1", "true", "yes", "y")
+
+    course_store = CourseStore() if sync_mysql else None
+    seen_keys: set[tuple[str, str]] | None = set() if course_store and deactivate_missing else None
     embedder = Embedder(reset=reset)
 
     logger.info("=== 큐릭 데이터 파이프라인 시작 ===")
-    logger.info(f"platform={platform}, incremental={incremental}, reset={reset}")
+    logger.info(
+        "platform=%s, incremental=%s, reset=%s, sync_mysql=%s, deactivate_missing=%s",
+        platform,
+        incremental,
+        reset,
+        sync_mysql,
+        deactivate_missing,
+    )
     logger.info(f"파이프라인 시작 전 ChromaDB: {embedder.count()}개")
 
     collectors = build_collectors(platform, api_key)
@@ -112,14 +136,30 @@ def run_pipeline(
     total_category_count = {}
     grand_total = 0
     
-    for gen, name in collectors:
-        count, category_count = run_collector(gen, embedder, name, progress_callback=progress_callback)
-        platform_stats[name] = count
-        grand_total += count
-        
-        # 카테고리 통합 카운트
-        for cat, cnt in category_count.items():
-            total_category_count[cat] = total_category_count.get(cat, 0) + cnt
+    try:
+        for gen, name in collectors:
+            count, category_count = run_collector(
+                gen,
+                embedder,
+                name,
+                course_store=course_store,
+                seen_keys=seen_keys,
+                progress_callback=progress_callback,
+            )
+            platform_stats[name] = count
+            grand_total += count
+            
+            # 카테고리 통합 카운트
+            for cat, cnt in category_count.items():
+                total_category_count[cat] = total_category_count.get(cat, 0) + cnt
+
+        if course_store and deactivate_missing and seen_keys is not None and platform == "ALL":
+            course_store.deactivate_missing(seen_keys)
+        elif course_store and deactivate_missing and platform != "ALL":
+            logger.warning("--deactivate-missing은 전체 수집(platform=ALL)에서만 실행됩니다. 현재 platform=%s", platform)
+    finally:
+        if course_store:
+            course_store.close()
 
     # 통계 출력
     logger.info("\n" + "="*60)
@@ -143,8 +183,30 @@ def run_pipeline(
     return grand_total
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="KuriQ 강좌 수집 → MySQL/Chroma 적재 파이프라인")
+    parser.add_argument(
+        "--platform",
+        default="ALL",
+        choices=["K-MOOC", "KOCW", "LLL_PORTAL", "SEOUL_LLL", "ALLGO", "ALL"],
+        help="수집할 플랫폼",
+    )
+    parser.add_argument("--reset-chroma", action="store_true", help="ChromaDB 컬렉션 삭제 후 재생성")
+    parser.add_argument("--sync-mysql", action="store_true", help="MySQL courses upsert 후 MySQL UUID로 Chroma 적재")
+    parser.add_argument("--deactivate-missing", action="store_true", help="이번 수집에 없는 기존 MySQL 강좌를 비활성화")
+    parser.add_argument("--full", action="store_true", help="--sync-mysql --reset-chroma --deactivate-missing 단축 옵션")
+    return parser.parse_args()
+
+
 def main():
-    run_pipeline()
+    args = parse_args()
+    run_pipeline(
+        platform=args.platform,
+        incremental=not args.full,
+        reset=args.reset_chroma or args.full,
+        sync_mysql=args.sync_mysql or args.full,
+        deactivate_missing=args.deactivate_missing or args.full,
+    )
 
 
 if __name__ == "__main__":
